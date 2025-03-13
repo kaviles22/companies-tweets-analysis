@@ -22,9 +22,7 @@ async def get_ai_insights(
     datos = request.app.state.datos
     
     try:
-        print("Getting insights!!")
         insights = calc_ai_insights(datos, company_id)
-        print(insights)
         return insights
     except Exception as e:
         logging.error(f"Error generating AI insights: {e}")
