@@ -9,9 +9,10 @@ from static import calc_response_rate, calc_conversation_ratio, calc_volume_metr
 from transformers import LlamaTokenizer, LlamaForCausalLM
 import os
 from transformers import AutoTokenizer, AutoModelForCausalLM
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B")
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import KMeans
+from sklearn.feature_extraction.text import TfidfVectorizer
+from collections import Counter
 
 # Configure logging
 logging.basicConfig(
@@ -161,8 +162,36 @@ async def get_company_insights(company_id: str) -> Dict[str, float]:
     
     return insights
 
+# Paso 6: Identificar las quejas por cluster usando TF-IDF para extraer las palabras clave
+def get_top_keywords(tweets, labels, n_keywords=3):
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=10)
+    # Agrupar los tweets por cada cluster
+    clusters = {}
+    for i, label in enumerate(labels):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(tweets[i])
+
+    # Obtener las palabras clave de cada cluster
+    cluster_keywords = {}
+    for label, cluster_tweets in clusters.items():
+        tfidf_matrix = vectorizer.fit_transform(cluster_tweets)
+        feature_names = vectorizer.get_feature_names_out()
+        dense = tfidf_matrix.todense()
+        summed = dense.sum(axis=0).A1
+        word_scores = zip(feature_names, summed)
+        sorted_words = sorted(word_scores, key=lambda x: x[1], reverse=True)
+        top_keywords = [word for word, score in sorted_words[:n_keywords]]
+        cluster_keywords[label] = top_keywords
+
+    return cluster_keywords    
+
+def limpiar_menciones(tweet):
+    # Expresión regular para eliminar menciones de usuario (@usuario)
+    return re.sub(r'@[\w]+', '', tweet)
+
 @app.get("/companies/{company_id}/ai-insights")
-async def get_ai_insights(company_id: str) -> Dict[str, str]:
+async def get_ai_insights(company_id: str) -> Dict[str, Dict]:
     """
     Returns AI-generated insights (currently a placeholder) for a given company.
     
@@ -173,19 +202,47 @@ async def get_ai_insights(company_id: str) -> Dict[str, str]:
         dict: A dictionary with AI insights (currently returns 'None').
     """
     global datos
-    logging.info(f"AI insights requested for company {company_id}.")
-    print(datos.iloc[0])
-    tweets = datos['text'].dropna().tolist()
-    document = "\n".join(tweets)
-    prompt = f"Extract the top 5 common issues from the following tweets:\n{document}\n\nTop 5 issues:"
 
-    inputs = tokenizer(prompt, return_tensors="pt")
+    tweets = datos.text.dropna().tolist()
+    # Limpiar todos los tweets eliminando las menciones
+    tweets = [limpiar_menciones(tweet) for tweet in tweets]
+    
+    # Paso 1: Cargar el modelo de SentenceTransformer (puedes usar un modelo más avanzado o específico si lo deseas)
+    model = SentenceTransformer('all-MiniLM-L6-v2')  # Modelo preentrenado
 
-    # Generate the response
-    output = model.generate(inputs['input_ids'], max_length=1000, num_return_sequences=1, do_sample=False)
+    # Paso 2: Generar embeddings para cada tweet
+    embeddings = model.encode(tweets)
 
-    # Decode the output
-    extracted_issues = tokenizer.decode(output[0], skip_special_tokens=True)
+    # Paso 3: Aplicar KMeans para agrupar los tweets en diferentes temas
+    num_topics = 5  # Ajusta esto según el número de quejas que desees identificar
+    kmeans = KMeans(n_clusters=num_topics, random_state=42)
+    kmeans.fit(embeddings)
 
+    # Paso 4: Ver las etiquetas de cada tweet (a qué grupo o queja pertenece cada tweet)
+    labels = kmeans.labels_
+
+    # Paso 5: Crear un DataFrame para visualizarlo mejor
+    df = pd.DataFrame({
+        'Tweet': tweets,
+        'Tema': labels
+    })
+
+    # Paso 7: Obtener las quejas comunes y las palabras clave más relevantes por cluster
+    top_keywords = get_top_keywords(tweets, labels, n_keywords=3)
+    # Paso 8: Contar la cantidad de tweets por cada cluster
+    cluster_counts = dict(Counter(kmeans.labels_))
+
+    # Mostrar las quejas de cada cluster con sus palabras clave y contar la cantidad de tweets
+    top_issues = {}
+    for label, keywords in top_keywords.items():
+        top_issues[label.item()] = " ".join(keywords)
+
+    # Contar la cantidad de tweets por cluster
+    top_counts = {}
+    for label, count in cluster_counts.items():
+        top_counts[label.item()] = count
+
+    print(top_issues)
+    print(top_counts)
     # Placeholder print for debugging
-    return {"top_issues": extracted_issues}
+    return {"top_issues": top_issues,"top_counts": top_counts}
