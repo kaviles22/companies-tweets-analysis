@@ -172,3 +172,61 @@ Good luck, and we look forward to reviewing your work!
 ---
 
 This technical test is intended to assess your backend development skills, your ability to integrate modern AI tools into data processing, and your proficiency in creating scalable, secure, and maintainable Python services with FastAPI.
+
+
+---
+# Tweets Analyzer API
+## Setup instructions
+Make sure to have python and docker installed.
+
+## Run application
+To run the application:
+1. Clone the repo
+2. Run docker compose up --build this will generate a docker image and run a docker container with the fastapi API
+3. Once the API is running you can acces it at http://localhost:8000
+
+The API has three endpoints:
+- **POST /ingest**
+  Here you can load a csv file containing the following columns: tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id.
+  
+- **GET /companies/{company_id}/insights**
+  Here you can choose one company to calculate the metrics of the responses (described above).
+      
+- **GET /companies/{company_id}/ai-insights**
+  Here you can choose one company to analyze the most common issues addressed by the customers.
+  
+## Run tests
+To run the tests you should create an environment using the requirements.txt file and then run pytest tests
+
+## API usage examples
+This examples were run using part of the data and accessing to VerizonSupport metrics
+
+- **POST /ingest**
+{
+  "message": "3552 tweets successfully loaded."
+}
+ - **GET /companies/{company_id}/insights**
+{
+  "response_rate": 0.7894736842105263,
+  "conversation_ratio": 1.0350877192982457,
+  "volume_metrics": 0.95,
+  "average_response_time": 4
+}
+
+- **GET /companies/{company_id}/ai-insights**
+- {
+  "top_issues": {
+    "0": "chew glass than deal with you criminals",
+    "1": "tv freezes when changing to anything under 523",
+    "2": "it is causing issues",
+    "3": "Verizon speed test fails repeatedly",
+    "4": "No changes"
+  },
+  "top_counts": {
+    "0": 9,
+    "1": 11,
+    "2": 4,
+    "3": 21,
+    "4": 12
+  }
+}
