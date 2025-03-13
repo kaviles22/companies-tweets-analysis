@@ -16,18 +16,18 @@ setup_logging()
 
 @router.post("/ingest")
 async def ingest_tweets(
-    request: Request,  # Para acceder al estado de la aplicación
+    request: Request,
     file: UploadFile = File(...)
 ) -> Dict[str, str]:
     try:
         logging.info("Starting tweet ingestion.")
         
-        # Leer el contenido del archivo
+        # Read the csv content
         contents = file.file.read()
         buffer = StringIO(contents.decode('utf-8'))
         csv_reader = csv.DictReader(buffer)
         
-        # Contar filas y preparar el archivo de salida
+        # Count rows and process data to save it as a csv file
         row_count = 0
         output_filename = '/data/input_data.csv'
         if not os.path.exists('/data'):
@@ -45,11 +45,11 @@ async def ingest_tweets(
         
         buffer.close()
         
-        # Cargar el CSV en un DataFrame y procesarlo
+        # Load csv in a DataFrame and process it
         datos = pd.read_csv(output_filename)
         datos = process_df(datos)
         
-        # Almacenar el DataFrame en el estado de la aplicación
+        # Store the DataFrame in the app state
         request.app.state.datos = datos
         
         logging.info(f"{row_count} tweets successfully ingested and processed.")
